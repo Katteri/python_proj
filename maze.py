@@ -30,7 +30,7 @@ class Cell:
 		if self.visited:
 			pygame.draw.rect(screen, pygame.Color('red'), (x, y, TILE, TILE))
 
-		# границы открисуем красным
+		# если граница с какой-то стороны, также отрисуем с той стороны красную ячейку
 		if not self.walls['top']:
 			pygame.draw.rect(screen, pygame.Color('red'), (x, y - TILE, TILE, TILE))
 		if not self.walls['right']:
