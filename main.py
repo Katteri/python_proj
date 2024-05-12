@@ -2,7 +2,7 @@ import telebot
 import sqlite3
 from maze_generation import get_map_cell
 
-bot = telebot.TeleBot('7089136398:AAGiQnXmU2vNWI2kZ2VtZKM8Zjhwm_5fFwQ')
+bot = telebot.TeleBot('secret')
 columns, rows = 6, 6
 current_score = 0
 
@@ -49,7 +49,7 @@ def get_map_str(map_cell, player):
 
 # создаем таблицу и вносим данные о пользователе
 def initial_table(message):
-	connection = sqlite3.connect('users.sql')
+	connection = sqlite3.connect('users.db')
 	cursor = connection.cursor()
 	cursor.execute('CREATE TABLE IF NOT EXISTS users (user_id int auto_increment primary key, username varchar(50), total_score int)')
 	# проверяем есть ли запись о пользователе в бд
@@ -65,13 +65,16 @@ def initial_table(message):
 # после игры обновляем счет игрока в таблице
 def increment_score(message):
 	global current_score
-	connection = sqlite3.connect('users.sql')
+	connection = sqlite3.connect('users.db')
 	cursor = connection.cursor()
 	cursor.execute(f'UPDATE users SET total_score = total_score + ? WHERE username LIKE ?', [current_score, message.chat.username])
 	current_score = 0
 	connection.commit()
+	print(cursor.execute('SELECT * FROM users'))
 	cursor.close()
 	connection.close()
+
+
 
 	bot.send_message(message.chat.id, 'Данные об игре были внесены в таблицу', reply_markup = keyboard_menu)
 
@@ -128,13 +131,35 @@ def github(message):
 # вывод статистики
 @bot.message_handler(func=lambda message: 'статистика' in message.text.lower())
 def statistic(message):
-	connection = sqlite3.connect('users.sql')
+	connection = sqlite3.connect('users.db')
 	cursor = connection.cursor()
-	info = cursor.execute('SELECT * FROM users')
-	if info.fetchall is None:
-		bot.send_message(message.chat.id, info, reply_markup = keyboard_menu)
-	else:
+	# берем только значение очков у пользователя. Так как нам возвращают кортеж, берем первое значение
+	total_score = cursor.execute('SELECT total_score FROM users WHERE username = ?', [message.chat.username]).fetchone()[0]
+	if total_score == 0:
 		bot.send_message(message.chat.id, 'Ни одна игра не была сыграна 😢', reply_markup = keyboard_menu)
+	else:
+		# извлекаем топ 5 пользователей
+		stat = cursor.execute('SELECT DENSE_RANK() OVER(ORDER BY total_score DESC) AS rank, total_score, username FROM users ORDER BY rank DESC LIMIT 5').fetchall()
+		
+		# считаем табуляцию для очков
+		max_len = 0
+		for i in range(len(stat)):
+			current_len = len(str(stat[i - 1][1]))
+			if current_len > max_len:
+				max_len = current_len
+		# записываем статистику в строку для последующего вывода сообщения
+		s = '<b>ТОП 5 игроков</b>\nместо очки имя'
+		for i in range(len(stat)):
+			s += f'\n{str(stat[i - 1][0])}          {stat[i - 1][1]}'
+			plus_len = 11 - max_len - len(str(stat[i - 1][1]))
+			for j in range(plus_len):
+				s += ' '
+			s += str(stat[i - 1][2])
+		# считаем собственный ранк пользователя
+		user_rank = cursor.execute('SELECT rank, total_score FROM (SELECT DENSE_RANK() OVER(ORDER BY total_score DESC) AS rank, username, total_score FROM users) WHERE username = ?', [message.chat.username]).fetchone()[0]
+		s += f'\n\nВаше место в топе: <b>{user_rank}</b>\nСумма ваших очков за все игры: <b>{total_score}</b>'
+		bot.send_message(message.chat.id, s, parse_mode = 'HTML', reply_markup = keyboard_menu)
+
 	cursor.close()
 	connection.close()
 
