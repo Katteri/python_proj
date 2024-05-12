@@ -1,9 +1,13 @@
 import telebot
 import sqlite3
+import time
 from maze_generation import get_map_cell
 
 bot = telebot.TeleBot('secret')
 columns, rows = 6, 6
+max_time = 300
+start_time = 0
+penalty = 0
 current_score = 0
 
 # игровая клавиатура
@@ -74,8 +78,6 @@ def increment_score(message):
 	cursor.close()
 	connection.close()
 
-
-
 	bot.send_message(message.chat.id, 'Данные об игре были внесены в таблицу', reply_markup = keyboard_menu)
 
 # стартовое сообщение
@@ -89,6 +91,8 @@ def main(message):
 # запуск игры
 @bot.message_handler(func=lambda message: 'играть' in message.text.lower())
 def play_message(message):
+	global start_time
+	start_time = time.time()
 	map_cell = get_map_cell(columns, rows)
 
 	user_data = {
@@ -103,7 +107,7 @@ def play_message(message):
 
 @bot.message_handler(func=lambda message: 'правила' in message.text.lower())
 def rules(message):
-	bot.send_message(message.chat.id, f'<b>Правила игры в лабиринт:</b>\n▪ дойти до нижней правой клетки, <em>не задев стены</em>',
+	bot.send_message(message.chat.id, f'<b>Правила игры в лабиринт:</b>\n▪ как можно быстрее дойти до правой нижней клетки, <em>не задев стены</em>',
 				  	parse_mode = 'HTML',
 				  	reply_markup = keyboard_menu)
 
@@ -114,13 +118,12 @@ def settings(message):
 	bot.register_next_step_handler(message, settings)
 
 def settings(message):
-	global columns, rows
+	global columns, rows, max_time
 	if 'телефон' in message.text.lower():
-		columns, rows = 6, 6
-		bot.send_message(message.chat.id, 'Настройки изменены', reply_markup = keyboard_menu)
+		columns, rows, max_time = 6, 6, 300
 	elif 'компьютер' in message.text.lower():
-		columns, rows = 9, 9
-		bot.send_message(message.chat.id, 'Настройки изменены', reply_markup = keyboard_menu)
+		columns, rows, max_time = 9, 9, 600
+	bot.send_message(message.chat.id, 'Настройки изменены', reply_markup = keyboard_menu)
 
 # ссылка на репозиторий
 @bot.message_handler(func=lambda message: 'репозиторий' in message.text.lower())
@@ -150,7 +153,7 @@ def statistic(message):
 		# записываем статистику в строку для последующего вывода сообщения
 		s = '<b>ТОП 5 игроков</b>\nместо очки имя'
 		for i in range(len(stat)):
-			s += f'\n{str(stat[i - 1][0])}          {stat[i - 1][1]}'
+			s += f'\n{str(stat[i - 1][0])}          {stat[i - 1][1]} '
 			plus_len = 11 - max_len - len(str(stat[i - 1][1]))
 			for j in range(plus_len):
 				s += ' '
@@ -166,7 +169,7 @@ def statistic(message):
 # функция, вызывающаяся при нажатии на кнопки игры
 @bot.callback_query_handler(func=lambda call: True)
 def callback_func(query):
-	global current_score
+	global current_score, penalty, start_time, max_time
 	
 	# получаем старые координаты
 	user_data = maps[query.message.chat.id]
@@ -184,24 +187,30 @@ def callback_func(query):
 
 	# проверям возможен ли такой ход, если нет - отнимаем очки
 	if new_x < 0 or new_x > 2 * columns - 2 or new_y < 0 or new_y > rows * 2 - 2:
-		current_score -= 1
+		penalty += 1
 		return None
 	if user_data['map'][new_x + new_y * (columns * 2 - 1)]:
-		current_score -= 1
+		penalty += 1
 		return None
 
 	user_data['x'], user_data['y'] = new_x, new_y
 
 	# проверка на выигрыш (выигрываем, если находимся в самой правой нижней клетке)
 	if new_x == columns * 2 - 2 and new_y == rows * 2 - 2:
-		bot.edit_message_text( chat_id = query.message.chat.id,
-							   message_id = query.message.id,
-							   text = f'Вы выиграли❕\nВаш счет за игру составил {current_score} очков')
+		# максимум играем 5 минут, из них вычитаем сколько время играли и штрафные очки, все это делим на 10
+		current_score = (max_time - round(time.time() - start_time) - penalty * 10) // 10
+		if current_score > 0:
+			bot.edit_message_text( chat_id = query.message.chat.id,
+								message_id = query.message.id,
+								text = f'Вы выиграли❗\nВаш счет за игру: {current_score} ✨')
+		else:
+			bot.edit_message_text( chat_id = query.message.chat.id,
+						 			message_id = query.message.id,
+									text = f'Вы проиграли с счетом {current_score} 😭')
 		increment_score(query.message)
 		return None
 
-	# передвигаем игрока и увеличиваем счет
-	current_score += 1
+	# передвигаем игрока
 	bot.edit_message_text( chat_id = query.message.chat.id,
 						   message_id = query.message.id,
 						   text = get_map_str(user_data['map'], (new_x, new_y)),
