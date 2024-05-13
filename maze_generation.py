@@ -7,7 +7,7 @@ def get_map_cell(columns, rows):
         def __init__(self, x, y):
             self.x = x
             self.y = y
-            self.walls = {'top': True, 'right': True, 'bottom': True, 'left': True}
+            self.walls = {"top": True, "right": True, "bottom": True, "left": True}
             self.visited = False
 
         # функция для получения индекса ячейки по координатам
@@ -45,17 +45,17 @@ def get_map_cell(columns, rows):
 
         # определяем какие стены нужно удалить
         if dx == 1:
-            current_cell.walls['left'] = False
-            next_cell.walls['right'] = False
+            current_cell.walls["left"] = False
+            next_cell.walls["right"] = False
         if dx == -1:
-            current_cell.walls['right'] = False
-            next_cell.walls['left'] = False
+            current_cell.walls["right"] = False
+            next_cell.walls["left"] = False
         if dy == 1:
-            current_cell.walls['top'] = False
-            next_cell.walls['bottom'] = False
+            current_cell.walls["top"] = False
+            next_cell.walls["bottom"] = False
         if dy == -1:
-            current_cell.walls['bottom'] = False
-            next_cell.walls['top'] = False
+            current_cell.walls["bottom"] = False
+            next_cell.walls["top"] = False
 
     # функция, проверяющая есть ли на данном месте стена
     def check_wall(grid_cell, x, y):
@@ -70,12 +70,12 @@ def get_map_cell(columns, rows):
         if x % 2 == 0:
             grid_x = x // 2
             grid_y = (y - 1) // 2
-            return grid_cell[grid_x + grid_y * columns].walls['bottom']
+            return grid_cell[grid_x + grid_y * columns].walls["bottom"]
         # иначе смотрим на клетку левее
         else:
             grid_x = (x - 1) // 2
             grid_y = y // 2
-            return grid_cell[grid_x + grid_y * columns].walls['right']
+            return grid_cell[grid_x + grid_y * columns].walls["right"]
 
     # создадим сетку
     grid_cell = [Cell(x, y) for y in range(rows) for x in range(columns)]
@@ -97,4 +97,8 @@ def get_map_cell(columns, rows):
         else:
             break
 
-    return [check_wall(grid_cell, x, y) for y in range(rows * 2 - 1) for x in range(columns * 2 - 1)]
+    return [
+        check_wall(grid_cell, x, y)
+        for y in range(rows * 2 - 1)
+        for x in range(columns * 2 - 1)
+    ]
