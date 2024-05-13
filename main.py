@@ -55,7 +55,7 @@ def get_map_str(map_cell, player):
 def initial_table(message):
 	connection = sqlite3.connect('users.db')
 	cursor = connection.cursor()
-	cursor.execute('CREATE TABLE IF NOT EXISTS users (user_id int auto_increment primary key, username varchar(50), total_score int)')
+	cursor.execute('CREATE TABLE IF NOT EXISTS users (username varchar(50), total_score int)')
 	# проверяем есть ли запись о пользователе в бд
 	info = cursor.execute('SELECT * FROM users WHERE username = ?', [message.chat.username])
 	# если записи нет, создаем ее
@@ -142,27 +142,27 @@ def statistic(message):
 		bot.send_message(message.chat.id, 'Ни одна игра не была сыграна 😢', reply_markup = keyboard_menu)
 	else:
 		# извлекаем топ 5 пользователей
-		stat = cursor.execute('SELECT DENSE_RANK() OVER(ORDER BY total_score DESC) AS rank, total_score, username FROM users ORDER BY rank DESC LIMIT 5').fetchall()
-		
+		stat = cursor.execute('SELECT DENSE_RANK() OVER(ORDER BY total_score DESC) AS rank, total_score, username FROM users ORDER BY rank LIMIT 5').fetchall()
 		# считаем табуляцию для очков
-		max_len = 0
-		for i in range(len(stat)):
-			current_len = len(str(stat[i - 1][1]))
-			if current_len > max_len:
-				max_len = current_len
+		max_lengths = [max(len(str(item)) for item in col) for col in stat]
+
 		# записываем статистику в строку для последующего вывода сообщения
-		s = '<b>ТОП 5 игроков</b>\nместо очки имя'
-		for i in range(len(stat)):
-			s += f'\n{str(stat[i - 1][0])}          {stat[i - 1][1]} '
-			plus_len = 11 - max_len - len(str(stat[i - 1][1]))
-			for j in range(plus_len):
-				s += ' '
-			s += str(stat[i - 1][2])
+		s = '<b>ТОП 5 игроков</b>\n\n'
+		header = ('место', 'очки', 'имя')
+		for i, (item, length) in enumerate(zip(header, max_lengths)):
+			s +=f'{str(item):<{length}} '
+		s += '\n'
+
+		for row in stat:
+			for i, (item, length) in enumerate(zip(row, max_lengths)):
+				s +=f'{str(item):<{length}} '
+				if i == len(row) - 1:
+					s += '\n'
+	
 		# считаем собственный ранк пользователя
 		user_rank = cursor.execute('SELECT rank, total_score FROM (SELECT DENSE_RANK() OVER(ORDER BY total_score DESC) AS rank, username, total_score FROM users) WHERE username = ?', [message.chat.username]).fetchone()[0]
 		s += f'\n\nВаше место в топе: <b>{user_rank}</b>\nСумма ваших очков за все игры: <b>{total_score}</b>'
 		bot.send_message(message.chat.id, s, parse_mode = 'HTML', reply_markup = keyboard_menu)
-
 	cursor.close()
 	connection.close()
 
