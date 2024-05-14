@@ -4,11 +4,33 @@ import time
 from maze_generation import get_map_cell
 
 bot = telebot.TeleBot("secret")
-columns, rows = 6, 6
-max_time = 300
-start_time = 0
-penalty = 0
-current_score = 0
+
+
+class game_settings:
+    columns, rows = 6, 6
+    max_time = 300
+    start_time = 0
+    penalty = 0
+    current_score = 0
+
+    def update_columns(columns):
+        game_settings.columns = columns
+
+    def update_rows(rows):
+        game_settings.rows = rows
+
+    def update_max_time(max_time):
+        game_settings.max_time = max_time
+
+    def update_start_time(start_time):
+        game_settings.start_time = start_time
+
+    def update_penalty(penalty):
+        game_settings.penalty = penalty
+
+    def update_current_score(current_score):
+        game_settings.current_score = current_score
+
 
 # игровая клавиатура
 keyboard_game = telebot.types.InlineKeyboardMarkup()
@@ -50,9 +72,9 @@ maps = {}
 
 def get_map_str(map_cell, player):
     map_str = ""
-    for y in range(rows * 2 - 1):
-        for x in range(columns * 2 - 1):
-            if map_cell[x + y * (columns * 2 - 1)]:
+    for y in range(game_settings.rows * 2 - 1):
+        for x in range(game_settings.columns * 2 - 1):
+            if map_cell[x + y * (game_settings.columns * 2 - 1)]:
                 map_str += "⬛"
             elif (x, y) == player:
                 map_str += "🔴"
@@ -92,16 +114,14 @@ def initial_table(message):
 
 # после игры обновляем счет игрока в таблице
 def increment_score(message):
-    global current_score
     connection = sqlite3.connect("users.db")
     cursor = connection.cursor()
     cursor.execute(
         f"UPDATE users SET total_score = total_score + ? WHERE username LIKE ?",
-        [current_score, message.chat.username],
+        [game_settings.current_score, message.chat.username],
     )
-    current_score = 0
+    game_settings.update_current_score(0)
     connection.commit()
-    print(cursor.execute("SELECT * FROM users"))
     cursor.close()
     connection.close()
 
@@ -127,9 +147,9 @@ def main(message):
 # запуск игры
 @bot.message_handler(func=lambda message: "играть" in message.text.lower())
 def play_message(message):
-    global start_time
-    start_time = time.time()
-    map_cell = get_map_cell(columns, rows)
+    game_settings.update_start_time(time.time())
+
+    map_cell = get_map_cell(game_settings.columns, game_settings.rows)
 
     user_data = {"map": map_cell, "x": 0, "y": 0}
 
@@ -160,11 +180,14 @@ def settings(message):
 
 
 def settings(message):
-    global columns, rows, max_time
     if "телефон" in message.text.lower():
-        columns, rows, max_time = 6, 6, 300
+        game_settings.update_columns(6)
+        game_settings.update_rows(6)
+        game_settings.update_max_time(300)
     elif "компьютер" in message.text.lower():
-        columns, rows, max_time = 9, 9, 600
+        game_settings.update_columns(9)
+        game_settings.update_rows(9)
+        game_settings.update_max_time(600)
     bot.send_message(message.chat.id, "Настройки изменены", reply_markup=keyboard_menu)
 
 
@@ -231,8 +254,6 @@ def statistic(message):
 # функция, вызывающаяся при нажатии на кнопки игры
 @bot.callback_query_handler(func=lambda call: True)
 def callback_func(query):
-    global current_score, penalty, start_time, max_time
-
     # получаем старые координаты
     user_data = maps[query.message.chat.id]
     new_x, new_y = user_data["x"], user_data["y"]
@@ -248,32 +269,42 @@ def callback_func(query):
         new_y += 1
 
     # проверям возможен ли такой ход, если нет - отнимаем очки
-    if new_x < 0 or new_x > 2 * columns - 2 or new_y < 0 or new_y > rows * 2 - 2:
-        penalty += 1
+    if (
+        new_x < 0
+        or new_x > 2 * game_settings.columns - 2
+        or new_y < 0
+        or new_y > game_settings.rows * 2 - 2
+    ):
+        game_settings.update_penalty(game_settings.penalty + 1)
         return None
-    if user_data["map"][new_x + new_y * (columns * 2 - 1)]:
-        penalty += 1
+    if user_data["map"][new_x + new_y * (game_settings.columns * 2 - 1)]:
+        game_settings.update_penalty(game_settings.penalty + 1)
         return None
 
     user_data["x"], user_data["y"] = new_x, new_y
 
     # проверка на выигрыш (выигрываем, если находимся в самой правой нижней клетке)
-    if new_x == columns * 2 - 2 and new_y == rows * 2 - 2:
+    if new_x == game_settings.columns * 2 - 2 and new_y == game_settings.rows * 2 - 2:
         # максимум играем 5 минут, из них вычитаем сколько время играли и штрафные очки, все это делим на 10
-        current_score = (
-            max_time - round(time.time() - start_time) - penalty * 10
-        ) // 10
-        if current_score > 0:
+        game_settings.update_current_score(
+            (
+                game_settings.max_time
+                - round(time.time() - game_settings.start_time)
+                - game_settings.penalty * 10
+            )
+            // 10
+        )
+        if game_settings.current_score > 0:
             bot.edit_message_text(
                 chat_id=query.message.chat.id,
                 message_id=query.message.id,
-                text=f"Вы выиграли❗\nВаш счет за игру: {current_score} ✨",
+                text=f"Вы выиграли❗\nВаш счет за игру: {game_settings.current_score} ✨",
             )
         else:
             bot.edit_message_text(
                 chat_id=query.message.chat.id,
                 message_id=query.message.id,
-                text=f"Вы проиграли с счетом {current_score} 😭",
+                text=f"Вы проиграли с счетом {game_settings.current_score} 😭",
             )
         increment_score(query.message)
         return None
